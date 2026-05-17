@@ -21,6 +21,7 @@ export async function saveProgress(studentId, gameState) {
         vocabulary:          gameState.vocabulary,
         story_flags:         gameState.storyFlags,
         unlocked_maps:       gameState.unlockedMaps,
+        char_config:         gameState.charConfig || null,
         last_saved:          new Date().toISOString(),
       }, { onConflict: "student_id" })
     if (error) throw error
@@ -107,5 +108,6 @@ export function progressToGameState(prog) {
     vocabulary:     prog.vocabulary || [],
     storyFlags:     prog.story_flags || {},
     unlockedMaps:   prog.unlocked_maps || ["school", "classroom"],
+    charConfig:     prog.char_config || null,
   }
 }

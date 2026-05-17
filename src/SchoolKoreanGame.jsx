@@ -2,6 +2,11 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { AnimatePresence, motion } from "framer-motion";
 import MiniGame from "./MiniGame";
 import { updateActivityLog } from "./saveManager";
+import CharacterCustomizer, { DEFAULT_CHARACTER, drawCharacter } from "./CharacterCustomizer";
+import {
+  GATE_MAP, FLOOR1_MAP, FLOOR2_MAP, ROOFTOP_MAP,
+  BIG_MAPS_META, BIG_PORTALS, BIG_NPCS, EXTRA_TILE_COLORS,
+} from "./bigMap";
 import {
   MAPS_META, MAP_NPCS, SCHOOL_NEW_PORTALS, EXIT_PORTAL,
   PLAYGROUND_MAP, CAFETERIA_MAP, GYM_MAP, RESTROOM_MAP,
@@ -594,12 +599,23 @@ function drawTile(ctx, tx, ty, type, camX, camY) {
   } else if(type===7) {
     // 나무
     ctx.fillStyle = "#1a3a1a"; ctx.fillRect(sx,sy,TS,TS);
-    // 기둥
     ctx.fillStyle = "#5a3010"; ctx.fillRect(sx+7,sy+10,6,10);
-    // 잎
     ctx.fillStyle = "#1a5a1a"; ctx.fillRect(sx+2,sy+2,16,12);
     ctx.fillStyle = "#2a7a2a"; ctx.fillRect(sx+4,sy+4,12,8);
     ctx.fillStyle = "#44aa44"; ctx.fillRect(sx+7,sy+5,6,5);
+  } else if(type===9) {
+    // 계단
+    ctx.fillStyle = "#3a2a1a"; ctx.fillRect(sx,sy,TS,TS);
+    // 계단 단 표시
+    for(let i=0;i<4;i++){
+      ctx.fillStyle = i%2===0?"#5a4a3a":"#4a3a2a";
+      ctx.fillRect(sx+i*4,sy+i*4,TS-i*4,TS-i*4);
+    }
+    ctx.fillStyle = "#8a6a4a"; ctx.fillRect(sx,sy,TS,2);
+    // 화살표
+    ctx.fillStyle = "#ffd700"; ctx.font=`${TS-4}px serif`; ctx.textAlign="center";
+    ctx.fillText("↕", sx+TS/2, sy+TS-2);
+    ctx.textAlign="left";
   } else {
     // 기본 바닥
     ctx.fillStyle = (tx+ty)%2===0 ? c.base : c.alt; ctx.fillRect(sx,sy,TS,TS);
@@ -934,7 +950,21 @@ export default function SchoolKoreanGameYS2({
   const [showMiniGame, setShowMiniGame] = useState(false);
   const [saveStatus, setSaveStatus]     = useState("");
 
-  const [mapMode, setMapMode] = useState(initialState?.mapMode || "school");
+  // ── 캐릭터 커스터마이징 ──
+  const [charConfig, setCharConfig] = useState(()=>{
+    try { return JSON.parse(localStorage.getItem("school-rpg-char")||"null") || initialState?.charConfig || DEFAULT_CHARACTER; }
+    catch { return DEFAULT_CHARACTER; }
+  });
+  const [showCustomizer, setShowCustomizer] = useState(()=>{
+    try { return !localStorage.getItem("school-rpg-char"); }
+    catch { return true; }
+  });
+
+  // ── 확장 맵 지원 ──
+  const BIG_MAP_IDS = ["gate","floor1","floor2","rooftop"];
+  const isBigMap = BIG_MAP_IDS.includes(mapMode);
+
+  const [mapMode, setMapMode] = useState(initialState?.mapMode || "floor1");
   const [px, setPx] = useState(initialState?.px || 13*TS+TS/2);
   const [py, setPy] = useState(initialState?.py || 8*TS+TS/2);
   const [facing, setFacing] = useState("down");
@@ -1004,7 +1034,7 @@ export default function SchoolKoreanGameYS2({
   useEffect(()=>{ pyRef.current=py; },[py]);
   useEffect(()=>{ keysRef.current=keys; },[keys]);
   useEffect(()=>{ touchRef.current=touchDir; },[touchDir]);
-  useEffect(()=>{ stateRef.current={mapMode,completed,activeNpcId,showMenu,showMissionWin,storyMode,showStoryHub,showEnding}; },[mapMode,completed,activeNpcId,showMenu,showMissionWin,storyMode,showStoryHub,showEnding]);
+  useEffect(()=>{ stateRef.current={mapMode,completed,activeNpcId,showMenu,showMissionWin,storyMode,showStoryHub,showEnding,charConfig}; },[mapMode,completed,activeNpcId,showMenu,showMissionWin,storyMode,showStoryHub,showEnding,charConfig]);
   useEffect(()=>{ saveTodayCompleted(completed); },[completed]);
   useEffect(()=>{ saveTotalXp(xp); },[xp]);
   useEffect(()=>{ try{localStorage.setItem("school-rpg-karma",String(karma));}catch{} },[karma]);
@@ -1023,6 +1053,7 @@ export default function SchoolKoreanGameYS2({
   useEffect(()=>{ try{localStorage.setItem("school-rpg-vocab",JSON.stringify(vocabulary));}catch{} },[vocabulary]);
   useEffect(()=>{ try{localStorage.setItem("school-rpg-starred",JSON.stringify(vocabStarred));}catch{} },[vocabStarred]);
   useEffect(()=>{ try{localStorage.setItem("school-rpg-unlocked",JSON.stringify(unlockedMaps));}catch{} },[unlockedMaps]);
+  useEffect(()=>{ try{localStorage.setItem("school-rpg-char",JSON.stringify(charConfig));}catch{} },[charConfig]);
   useEffect(()=>{ if(playerName) try{localStorage.setItem("school-rpg-name",playerName);}catch{} },[playerName]);
   useEffect(()=>{ setSpeechOk(typeof window!=="undefined"&&!!(window.SpeechRecognition||window.webkitSpeechRecognition)); },[]);
 
@@ -1127,18 +1158,27 @@ export default function SchoolKoreanGameYS2({
     if(mapMode==="restroom")    return RESTROOM_MAP;
     if(mapMode==="teacherroom") return TEACHERROOM_MAP;
     if(mapMode==="afterschool") return AFTERSCHOOL_MAP;
+    // 확장 맵
+    if(mapMode==="gate")        return GATE_MAP;
+    if(mapMode==="floor1")      return FLOOR1_MAP;
+    if(mapMode==="floor2")      return FLOOR2_MAP;
+    if(mapMode==="rooftop")     return ROOFTOP_MAP;
     return SCHOOL_MAP;
   },[mapMode]);
 
   const curNpcs = useMemo(()=>{
     const baseNpcs = mapMode==="school" ? SCHOOL_NPCS
       : mapMode==="classroom" ? CLASS_NPCS
-      : MAP_NPCS[mapMode] || [];
+      : BIG_NPCS[mapMode]   // 확장 맵 NPC
+      || MAP_NPCS[mapMode]   // 기존 추가 맵 NPC
+      || [];
     return buildDailyNpcs(baseNpcs, todayTheme, mapMode);
   },[mapMode, todayTheme]);
 
   const curPortals = useMemo(()=>{
     if(mapMode==="school") return SCHOOL_NEW_PORTALS;
+    // 확장 맵 포탈
+    if(BIG_PORTALS[mapMode]) return BIG_PORTALS[mapMode];
     return [EXIT_PORTAL];
   },[mapMode]);
 
@@ -1172,8 +1212,11 @@ export default function SchoolKoreanGameYS2({
 
   // 현재 존
   const currentZoneName = useMemo(()=>{
+    const allMeta = { ...MAPS_META, ...BIG_MAPS_META };
+    if(allMeta[mapMode]) return allMeta[mapMode].name;
     if(mapMode==="school") return "학교 복도";
-    return "교실 내부";
+    if(mapMode==="classroom") return "교실 내부";
+    return mapMode;
   },[mapMode]);
 
   // ── 효과음 ──
@@ -1292,8 +1335,9 @@ export default function SchoolKoreanGameYS2({
         drawNpc(ctx,npc,fr,isNear,isDone,camX2,camY2);
       });
 
-      // 플레이어
-      drawDotChar(ctx,cpx,cpy,"#ff4444","#cc1111",fr,undefined,camX2,camY2,true);
+      // 플레이어 (커스터마이징 적용)
+      const charCfg = stateRef.current.charConfig || DEFAULT_CHARACTER;
+      drawCharacter(ctx, cpx, cpy, charCfg, 1, fr);
 
       // 조명
       drawLight(ctx,cpx,cpy,camX2,camY2);
@@ -1551,6 +1595,20 @@ export default function SchoolKoreanGameYS2({
   return (
     <>
       <style>{YS2_STYLE}</style>
+
+      {/* ── 캐릭터 커스터마이저 ── */}
+      {showCustomizer&&(
+        <CharacterCustomizer
+          initialConfig={charConfig}
+          playerName={playerName||"플레이어"}
+          onConfirm={(cfg)=>{
+            setCharConfig(cfg);
+            setShowCustomizer(false);
+            try{localStorage.setItem("school-rpg-char",JSON.stringify(cfg));}catch{}
+          }}
+          onCancel={charConfig!==DEFAULT_CHARACTER?()=>setShowCustomizer(false):null}
+        />
+      )}
 
       {/* ── 이름 입력 오버레이 (첫 방문) ── */}
       {showNameInput&&(
@@ -2199,6 +2257,45 @@ export default function SchoolKoreanGameYS2({
                     👤 {playerName||"이름 설정"}
                   </button>
                 )}
+                {/* 캐릭터 꾸미기 버튼 */}
+                <button className="ys2-bgm-btn" style={{borderColor:"#ff88cc",color:"#ff88cc"}}
+                  onClick={()=>setShowCustomizer(true)}>🎨 캐릭터</button>
+              </div>
+
+              {/* 확장 맵 이동 버튼 */}
+              {(mapMode==="school"||mapMode==="gate"||mapMode==="floor1"||mapMode==="floor2"||mapMode==="rooftop") && (
+                <div style={{marginTop:6,borderTop:"1px solid #00004a",paddingTop:6}}>
+                  <div style={{color:"#00ffff",fontSize:"12px",marginBottom:4}}>🏢 확장 맵</div>
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                    {[
+                      {id:"gate",   label:"🏫 정문"},
+                      {id:"floor1", label:"🏢 1층"},
+                      {id:"floor2", label:"🏢 2층", ch:"ch2"},
+                      {id:"rooftop",label:"🌤 옥상", ch:"ch3"},
+                    ].map(m=>{
+                      const locked = m.ch && !unlockedMaps.includes(m.id);
+                      return (
+                        <button key={m.id} className="ys2-bgm-btn"
+                          style={{
+                            borderColor: locked?"#444":mapMode===m.id?"#ffff00":"#4488ff",
+                            color: locked?"#444":mapMode===m.id?"#ffff00":"#4488ff",
+                            opacity: locked?0.5:1,
+                          }}
+                          disabled={locked}
+                          onClick={()=>{
+                            if(locked) return;
+                            setMapMode(m.id);
+                            const spawnMap = {gate:{x:29*20+10,y:2*20+10}, floor1:{x:29*20+10,y:9*20+10}, floor2:{x:29*20+10,y:9*20+10}, rooftop:{x:29*20+10,y:8*20+10}};
+                            const sp = spawnMap[m.id];
+                            if(sp){ setPx(sp.x); setPy(sp.y); }
+                          }}>
+                          {locked?"🔒":""}{m.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               </div>
 
               {/* 저장 / 로그아웃 버튼 */}

@@ -2263,11 +2263,10 @@ export default function SchoolKoreanGameYS2({
               </div>
 
               {/* 확장 맵 이동 버튼 */}
-              {(mapMode==="school"||mapMode==="gate"||mapMode==="floor1"||mapMode==="floor2"||mapMode==="rooftop") && (
-                <div style={{marginTop:6,borderTop:"1px solid #00004a",paddingTop:6}}>
-                  <div style={{color:"#00ffff",fontSize:"12px",marginBottom:4}}>🏢 확장 맵</div>
-                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                    {[
+              <div style={{marginTop:6,borderTop:"1px solid #00004a",paddingTop:6}}>
+                <div style={{color:"#00ffff",fontSize:"12px",marginBottom:4}}>🏢 확장 맵</div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                  {[
                       {id:"gate",   label:"🏫 정문"},
                       {id:"floor1", label:"🏢 1층"},
                       {id:"floor2", label:"🏢 2층", ch:"ch2"},
@@ -2295,7 +2294,6 @@ export default function SchoolKoreanGameYS2({
                     })}
                   </div>
                 </div>
-              )}
               </div>
 
               {/* 저장 / 로그아웃 버튼 */}
